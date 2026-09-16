@@ -1,0 +1,14 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "cleanUrls": true,
+  "rewrites": [
+    { "source": "/api/queues/:id/join", "destination": "/api/queues/:id?action=join" },
+    { "source": "/api/queues/:id/position", "destination": "/api/queues/:id?action=position" },
+    { "source": "/api/queues/:id/next", "destination": "/api/queues/:id?action=next" },
+    { "source": "/api/queues/:id/pause", "destination": "/api/queues/:id?action=pause" },
+    { "source": "/api/queues/:id/resume", "destination": "/api/queues/:id?action=resume" },
+    { "source": "/api/queues/:id/close", "destination": "/api/queues/:id?action=close" },
+    { "source": "/api/queues/:id/members/remove", "destination": "/api/queues/:id?action=remove" }
+  ]
+}

@@ -131,6 +131,20 @@
       }[character]));
     }
 
+    async function apiRequest(path, options = {}) {
+      const response = await fetch(path, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-QueueLess-Client-Id': store.clientId,
+          ...(options.headers || {})
+        }
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'The server could not complete that request.');
+      return data;
+    }
+
     // --- APPLICATION STATE (Synced with localStorage) ---
     class AppStore {
       constructor() {
@@ -162,6 +176,8 @@
             this.showPublicJoinForm = false;
             this.joinFormError = '';
             this.joinDraft = { queueName: '', userName: '', identifier: '' };
+            this.clientId = parsed.clientId || localStorage.getItem('queueless_client_id') || crypto.randomUUID();
+            this.managerClientId = parsed.managerClientId || this.clientId;
             this.services.forEach(service => this.syncQueue(service.id));
             this.saveState();
             return;
@@ -190,6 +206,8 @@
         this.showPublicJoinForm = false;
         this.joinFormError = '';
         this.joinDraft = { queueName: '', userName: '', identifier: '' };
+        this.clientId = localStorage.getItem('queueless_client_id') || crypto.randomUUID();
+        this.managerClientId = this.clientId;
         this.saveState();
       }
 
@@ -204,12 +222,53 @@
           history: this.history,
           settings: this.settings,
           managerId: this.managerId,
+          clientId: this.clientId,
+          managerClientId: this.managerClientId,
           ticketCounter: this.ticketCounter
         };
         try {
+          localStorage.setItem('queueless_client_id', this.clientId);
           localStorage.setItem('queueless_state_v1', JSON.stringify(payload));
         } catch (e) {
           console.error("Failed to save state", e);
+        }
+      }
+
+      useIdentity(name) {
+        const normalized = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        this.clientId = `visitor-${normalized || crypto.randomUUID()}`;
+        localStorage.setItem('queueless_client_id', this.clientId);
+      }
+
+      applyQueue(queue) {
+        if (!queue) return;
+        const service = {
+          id: queue.id,
+          name: queue.name,
+          description: queue.description || '',
+          avgServiceTime: queue.serviceTime,
+          serviceTime: queue.serviceTime,
+          waitingCount: queue.waitingCount || 0,
+          currentServingTicket: queue.members?.find(member => member.status === 'serving')?.id || 'None',
+          status: String(queue.status || 'open').toUpperCase(),
+          counter: 'Queue counter',
+          ownerId: queue.owned === false ? 'remote' : this.managerClientId
+        };
+        this.services = [...this.services.filter(item => item.id !== service.id), service];
+        if (queue.members) {
+          const entries = queue.members.map(member => ({
+            id: member.id,
+            ticket: member.id,
+            serviceId: queue.id,
+            serviceName: queue.name,
+            user: member.name,
+            joinedTime: new Date(member.joinedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            joinedAt: new Date(member.joinedAt).getTime(),
+            position: member.position,
+            status: member.status === 'serving' ? 'CALLED' : 'WAITING',
+            counter: 'Queue counter'
+          }));
+          this.queueEntries = [...this.queueEntries.filter(entry => entry.serviceId !== queue.id), ...entries];
         }
       }
 
@@ -265,14 +324,24 @@
         renderApp();
       }
 
-      openManager() {
+      async openManager() {
+        this.clientId = this.managerClientId;
         this.auth = { role: 'admin', name: 'Queue manager' };
         this.activeView = 'admin-dashboard';
         this.saveState();
         renderApp();
+        try {
+          const queues = await apiRequest('/api/queues');
+          queues.forEach(queue => this.applyQueue(queue));
+          this.saveState();
+          renderApp();
+        } catch (error) {
+          this.joinFormError = error.message;
+          renderApp();
+        }
       }
 
-      joinFromPublicForm(queueName, userName, identifier = '') {
+      async joinFromPublicForm(queueName, userName, identifier = '') {
         const cleanQueueName = queueName.trim();
         const cleanUserName = userName.trim();
         this.joinDraft = { queueName: cleanQueueName, userName: cleanUserName, identifier: identifier.trim() };
@@ -282,29 +351,36 @@
           return;
         }
 
-        const service = this.services.find(item => item.name.toLowerCase() === cleanQueueName.toLowerCase());
-        if (!service) {
-          this.joinFormError = `Queue not found. Create “${cleanQueueName}” instead.`;
+        try {
+          this.useIdentity(cleanUserName);
+          const queues = await apiRequest('/api/queues');
+          const service = queues.find(item => item.name.toLowerCase() === cleanQueueName.toLowerCase());
+          if (!service) {
+            this.joinFormError = `Queue not found. Create “${cleanQueueName}” instead.`;
+            renderApp();
+            return;
+          }
+          if (service.status !== 'open') {
+            this.joinFormError = service.status === 'closed' ? 'Queue has been closed. Nobody can join it.' : 'Queue is currently paused. New people cannot join yet.';
+            renderApp();
+            return;
+          }
+          this.auth = { role: 'student', name: cleanUserName, identifier: identifier.trim() };
+          const joined = await apiRequest(`/api/queues/${service.id}/join`, {
+            method: 'POST', body: JSON.stringify({ name: cleanUserName, identifier })
+          });
+          this.applyQueue(joined.queue);
+          this.myTicket = { entryId: joined.member.id, ticket: joined.member.id.slice(0, 8), serviceId: service.id, serviceName: service.name, position: joined.member.position, initialPosition: joined.member.position, estimatedWait: joined.member.estimatedWait, joinedTime: new Date(joined.member.joinedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), counter: 'Queue counter', avgServiceTime: service.serviceTime, status: joined.member.status === 'serving' ? 'CALLED' : 'WAITING' };
+          this.showPublicJoinForm = false;
+          this.joinFormError = '';
+          this.joinDraft = { queueName: '', userName: '', identifier: '' };
+          this.activeView = 'student-my-queue';
+          this.saveState();
           renderApp();
-          return;
-        }
-
-        if (service.status !== 'ACTIVE') {
-          this.joinFormError = service.status === 'CLOSED' ? 'Queue has been closed. Nobody can join it.' : 'Queue is currently paused. New people cannot join yet.';
+        } catch (error) {
+          this.joinFormError = error.message;
           renderApp();
-          return;
         }
-
-        this.auth = {
-          role: 'student',
-          name: cleanUserName,
-          identifier: identifier.trim()
-        };
-        this.showPublicJoinForm = false;
-        this.joinFormError = '';
-        this.joinDraft = { queueName: '', userName: '', identifier: '' };
-        this.selectedServiceForJoin = service;
-        this.confirmJoinQueue();
       }
 
       openJoinModal(serviceId) {
@@ -342,96 +418,45 @@
         }
       }
 
-      confirmJoinQueue() {
+      async confirmJoinQueue() {
         if (!this.selectedServiceForJoin) return;
         const service = this.selectedServiceForJoin;
-
-        if (service.status !== 'ACTIVE') {
-          alert(service.status === 'CLOSED' ? 'Queue has been closed.' : 'Queue is currently paused.');
-          return;
-        }
-
-        this.syncQueue(service.id);
-        const position = this.queueEntries.filter(entry => entry.serviceId === service.id && entry.status === 'WAITING').length + 1;
-        const ticketId = `${service.prefix}-${String(++this.ticketCounter).padStart(3, '0')}`;
-        const entryId = `local-${Date.now()}`;
-        const timeString = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const newEntry = {
-            id: entryId,
-            ticket: ticketId,
-            serviceId: service.id,
-            serviceName: service.name,
-            user: `${this.auth ? this.auth.name : 'Visitor'} (You)`,
-            joinedTime: timeString,
-            position,
-            status: 'WAITING',
-            joinedAt: Date.now(),
-            counter: service.counter
-        };
-
-        this.queueEntries.push(newEntry);
-          this.syncQueue(service.id);
-        this.myTicket = {
-            entryId,
-            ticket: ticketId,
-            serviceId: service.id,
-            serviceName: service.name,
-            position,
-            initialPosition: position,
-            estimatedWait: Math.max(0, position - 1) * service.avgServiceTime,
-            joinedTime: timeString,
-            counter: service.counter,
-            avgServiceTime: service.avgServiceTime,
-            status: 'WAITING'
-        };
-
-        this.selectedServiceForJoin = null;
-        this.activeView = 'student-my-queue';
-        this.saveState();
-        renderApp();
+        if (!this.auth?.name) { alert('Enter your name before joining a queue.'); return; }
+        try {
+          this.useIdentity(this.auth.name);
+          const joined = await apiRequest(`/api/queues/${service.id}/join`, { method: 'POST', body: JSON.stringify({ name: this.auth.name, identifier: this.auth.identifier || '' }) });
+          this.applyQueue(joined.queue);
+          this.myTicket = { entryId: joined.member.id, ticket: joined.member.id.slice(0, 8), serviceId: service.id, serviceName: service.name, position: joined.member.position, initialPosition: joined.member.position, estimatedWait: joined.member.estimatedWait, joinedTime: new Date(joined.member.joinedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), counter: service.counter, avgServiceTime: service.avgServiceTime, status: joined.member.status === 'serving' ? 'CALLED' : 'WAITING' };
+          this.selectedServiceForJoin = null;
+          this.activeView = 'student-my-queue';
+          this.saveState();
+          renderApp();
+        } catch (error) { alert(error.message); }
       }
 
-      leaveQueue() {
+      async leaveQueue() {
         if (!this.myTicket) return;
-        const ticketNum = this.myTicket.ticket;
-        const serviceId = this.myTicket.serviceId;
-
-        // Remove from queueEntries
-        this.queueEntries = this.queueEntries.filter(e => e.ticket !== ticketNum);
-
-        // Adjust service count
-        this.syncQueue(serviceId);
-
-        // Add to history
-        this.history.unshift({
-          id: 'h-' + Date.now(),
-          ticket: ticketNum,
-          service: this.myTicket.serviceName,
-          date: 'Today',
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          status: 'CANCELLED',
-          waitTime: '4 min'
-        });
-
-        this.myTicket = null;
-        this.activeView = 'student-dashboard';
-        this.saveState();
-        renderApp();
+        try {
+          const result = await apiRequest(`/api/queue-members/${this.myTicket.entryId}?action=leave`, { method: 'POST' });
+          this.applyQueue(result);
+          this.history.unshift({ id: `h-${Date.now()}`, ticket: this.myTicket.ticket, service: this.myTicket.serviceName, date: 'Today', time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), status: 'CANCELLED', waitTime: `${this.myTicket.estimatedWait} min` });
+          this.myTicket = null;
+          this.activeView = 'student-dashboard';
+          this.saveState();
+          renderApp();
+        } catch (error) { alert(error.message); }
       }
 
-      refreshTicketPosition() {
+      async refreshTicketPosition() {
         if (!this.myTicket || !this.myTicket.entryId) return;
-
-        const entry = this.queueEntries.find(e => e.id === this.myTicket.entryId);
-        if (!entry || entry.status !== 'WAITING') return;
-
-        this.syncQueue(this.myTicket.serviceId);
-        entry.position = Math.max(1, entry.position - 1);
-        this.myTicket.position = entry.position;
-        this.myTicket.estimatedWait = Math.max(0, entry.position - 1) * this.myTicket.avgServiceTime;
-        this.myTicket.status = entry.status;
-        this.saveState();
-        renderApp();
+        try {
+          const member = await apiRequest(`/api/queues/${this.myTicket.serviceId}/position`);
+          this.myTicket.position = member.position;
+          this.myTicket.estimatedWait = member.estimatedWait;
+          this.myTicket.status = member.status === 'serving' ? 'CALLED' : 'WAITING';
+          this.saveState();
+          renderApp();
+        } catch (error) { alert(error.message); }
       }
 
       finishTurn() {
@@ -460,46 +485,15 @@
       }
 
       // --- Admin Actions ---
-      adminCallNext(serviceId) {
-        const service = this.services.find(s => s.id === serviceId);
-        if (!service || service.status !== 'ACTIVE') return;
-
-          const nextInLine = this.queueEntries
-            .filter(e => e.serviceId === serviceId && e.status === 'WAITING')
-            .sort((a, b) => a.position - b.position)[0];
-          if (!nextInLine) {
-            alert('No one is waiting in this queue.');
-            return;
-          }
-
-          const currentServing = this.queueEntries.find(e =>
-            e.serviceId === serviceId && (e.status === 'SERVING' || e.status === 'CALLED')
-          );
-          if (currentServing) {
-            currentServing.status = 'COMPLETED';
-            this.history.unshift({
-              id: 'h-' + Date.now(),
-              ticket: currentServing.ticket,
-              service: currentServing.serviceName,
-              date: 'Today',
-              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              status: 'COMPLETED',
-              waitTime: '12 min'
-            });
-          }
-
-          nextInLine.status = 'CALLED';
-          nextInLine.position = 0;
-          service.currentServingTicket = nextInLine.ticket;
-
-          if (this.myTicket && this.myTicket.ticket === nextInLine.ticket) {
-            this.myTicket.position = 0;
-            this.myTicket.status = 'CALLED';
-          }
-
-          this.syncQueue(serviceId);
+      async adminCallNext(serviceId) {
+        try {
+          const result = await apiRequest(`/api/queues/${serviceId}/next`, { method: 'POST' });
+          this.applyQueue(result.queue);
+          if (!result.member) { alert('No one is waiting in this queue.'); return; }
+          if (this.myTicket && this.myTicket.entryId === result.member.id) { this.myTicket.position = 0; this.myTicket.status = 'CALLED'; this.myTicket.estimatedWait = 0; }
           this.saveState();
           renderApp();
+        } catch (error) { alert(error.message); }
       }
 
       adminCompleteEntry(entryId) {
@@ -528,22 +522,22 @@
         renderApp();
       }
 
-      toggleQueue(serviceId) {
+      async toggleQueue(serviceId) {
         const service = this.services.find(item => item.id === serviceId);
         if (!service) return;
         if (service.status === 'CLOSED') return;
-        service.status = service.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE';
-        this.saveState();
-        renderApp();
+        try {
+          const action = service.status === 'ACTIVE' ? 'pause' : 'resume';
+          const queue = await apiRequest(`/api/queues/${serviceId}/${action}`, { method: 'POST' });
+          this.applyQueue(queue); this.saveState(); renderApp();
+        } catch (error) { alert(error.message); }
       }
 
-      closeQueue(serviceId) {
+      async closeQueue(serviceId) {
         const service = this.services.find(item => item.id === serviceId);
         if (!service) return;
         if (!confirm(`Close ${service.name}? People will no longer be able to join it.`)) return;
-        service.status = 'CLOSED';
-        this.saveState();
-        renderApp();
+        try { const queue = await apiRequest(`/api/queues/${serviceId}/close`, { method: 'POST' }); this.applyQueue(queue); this.saveState(); renderApp(); } catch (error) { alert(error.message); }
       }
 
       removeQueue(serviceId) {
@@ -568,35 +562,21 @@
         renderApp();
       }
 
-      adminRemoveEntry(entryId) {
+      async adminRemoveEntry(entryId) {
         const entry = this.queueEntries.find(e => e.id === entryId);
-        if (entry) {
-          if (this.myTicket && this.myTicket.ticket === entry.ticket) {
-            this.myTicket = null;
-          }
-        }
-        this.queueEntries = this.queueEntries.filter(e => e.id !== entryId);
-        if (entry) this.syncQueue(entry.serviceId);
-        this.saveState();
-        renderApp();
+        if (!entry) return;
+        try { const queue = await apiRequest(`/api/queues/${entry.serviceId}/members/remove`, { method: 'POST', body: JSON.stringify({ memberId: entry.id }) }); this.applyQueue(queue); if (this.myTicket?.entryId === entry.id) this.myTicket = null; this.saveState(); renderApp(); } catch (error) { alert(error.message); }
       }
 
-      createQueue(name, description, avgServiceTime, capacity = '') {
-        const newId = 'srv-' + Date.now();
-        const newService = {
-          id: newId,
-          prefix: name.replace(/[^a-z]/gi, '').charAt(0).toUpperCase() || 'Q',
-          name,
-          description: description || 'No description provided.',
-          ownerId: this.managerId,
-          waitingCount: 0,
-          avgServiceTime: parseInt(avgServiceTime, 10) || 5,
-          capacity: capacity ? parseInt(capacity, 10) : null,
-          currentServingTicket: 'None',
-          status: 'ACTIVE',
-          counter: 'Window ' + (this.services.length + 1)
-        };
-        this.services.push(newService);
+      async createQueue(name, description, avgServiceTime, capacity = '') {
+        try {
+          this.clientId = this.managerClientId;
+          const queue = await apiRequest('/api/queues', { method: 'POST', body: JSON.stringify({ name, description, serviceTime: Number(avgServiceTime) }) });
+          this.applyQueue(queue);
+        } catch (error) {
+          alert(error.message);
+          return;
+        }
         this.showCreateQueueModal = false;
         if (!this.auth) this.auth = { role: 'admin', name: 'Queue manager' };
         this.activeView = 'admin-dashboard';
