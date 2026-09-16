@@ -1,0 +1,1989 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QueueLess - Smart Queue Management</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              900: '#1e1b4b',
+            },
+            slate: {
+              850: '#151f32',
+              900: '#0f172a',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #f8fafc;
+      color: #0f172a;
+    }
+    .ticket-rip {
+      background: radial-gradient(circle at center, transparent 7px, #ffffff 8px);
+      background-size: 20px 20px;
+    }
+    /* Pulse badge */
+    @keyframes pulse-subtle {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.85; transform: scale(1.03); }
+    }
+    .turn-glow {
+      box-shadow: 0 0 35px -5px rgba(99, 102, 241, 0.4);
+    }
+    html { scroll-behavior: smooth; }
+    body { overflow-x: hidden; -webkit-font-smoothing: antialiased; }
+    button, input, select, textarea { font: inherit; }
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, a:focus-visible {
+      outline: 3px solid rgba(99, 102, 241, .28);
+      outline-offset: 2px;
+    }
+    button { min-height: 40px; transition: background-color .18s ease, border-color .18s ease, color .18s ease, box-shadow .18s ease, transform .18s ease; }
+    button:active { transform: translateY(1px); }
+    #app > * { animation: page-enter .22s ease-out both; }
+    .queue-card { transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
+    .queue-card:hover { border-color: #c7d2fe; box-shadow: 0 12px 28px rgba(79, 70, 229, .10); transform: translateY(-2px); }
+    .empty-state { border: 1px dashed #cbd5e1; background: rgba(255, 255, 255, .72); }
+    @keyframes page-enter { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+    @media (max-width: 767px) {
+      body { font-size: 15px; }
+      body > #app > .min-h-screen > header > div { height: auto; min-height: 5rem; padding-top: .75rem; padding-bottom: .75rem; flex-wrap: wrap; gap: .5rem; }
+      body > #app > .min-h-screen > header nav { width: 100%; justify-content: flex-end; gap: .25rem; }
+      body > #app > .min-h-screen > header nav button { padding: .5rem .65rem; font-size: .75rem; }
+      header.sticky { position: static; }
+      header .max-w-6xl { padding-left: 1rem; padding-right: 1rem; }
+      header .h-16 { height: auto; min-height: 4.25rem; padding-top: .75rem; padding-bottom: .75rem; }
+      header nav { width: 100%; gap: .25rem; justify-content: space-between; }
+      header nav button { flex: 1 1 0; justify-content: center; padding-left: .4rem; padding-right: .4rem; min-height: 44px; }
+      header nav button span { font-size: .72rem; }
+      main > .max-w-6xl, main .max-w-6xl { padding-left: 1rem; padding-right: 1rem; padding-top: 1.25rem; padding-bottom: 1.5rem; }
+      main .grid { grid-template-columns: minmax(0, 1fr) !important; }
+      main .flex-col.md\:flex-row { align-items: stretch; }
+      main .flex-col.md\:flex-row > button, main .flex-col.md\:flex-row > a { width: 100%; justify-content: center; }
+      main .grid-cols-4, main .grid-cols-3, main .grid-cols-2 { grid-template-columns: minmax(0, 1fr) !important; }
+      main .gap-6 { gap: 1rem; }
+      main .gap-8 { gap: 1.25rem; }
+      main h1 { font-size: 1.65rem; line-height: 1.15; }
+      main h2 { font-size: 1.25rem; }
+      main .text-5xl { font-size: 3.4rem; }
+      main .overflow-x-auto { -webkit-overflow-scrolling: touch; }
+      main table { min-width: 38rem; }
+      form { width: 100%; }
+      form input, form select, form textarea { min-height: 44px; font-size: 1rem; }
+      [role="dialog"] > div, .fixed > div { max-height: calc(100vh - 2rem); overflow-y: auto; }
+      .ticket-rip { background-size: 16px 16px; }
+    }
+    @media (min-width: 768px) and (max-width: 1100px) {
+      main .max-w-6xl { padding-left: 1.5rem; padding-right: 1.5rem; }
+      main .grid-cols-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      main .grid-cols-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col bg-slate-50 text-slate-900 selection:bg-indigo-100 selection:text-indigo-900">
+
+  <!-- Root App Container -->
+  <div id="app" class="flex-1 flex flex-col">
+    <!-- Rendered Dynamically via Vanilla JS State Machine -->
+  </div>
+
+  <script>
+    /**
+     * QUEUELESS WEB APPLICATION
+     * Complete Frontend with Simulated Backend State, LocalStorage persistence,
+     * Student Portal, Admin Portal, Live Ticket Simulation, Modal flows, Statistics, and Settings.
+     */
+
+    // --- APPLICATION STARTS EMPTY ---
+    const INITIAL_SERVICES = [];
+    const INITIAL_QUEUE_ENTRIES = [];
+    const INITIAL_HISTORY = [];
+
+    function escapeHtml(value = '') {
+      return String(value).replace(/[&<>'"]/g, character => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+      }[character]));
+    }
+
+    // --- APPLICATION STATE (Synced with localStorage) ---
+    class AppStore {
+      constructor() {
+        this.loadState();
+      }
+
+      loadState() {
+        try {
+          const stored = localStorage.getItem('queueless_state_v1');
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            if (parsed.schemaVersion !== 2) throw new Error('Old demo data detected');
+            this.auth = parsed.auth || null;
+            this.activeView = parsed.activeView || 'home';
+            this.services = Array.isArray(parsed.services) ? parsed.services : [];
+            this.queueEntries = Array.isArray(parsed.queueEntries) ? parsed.queueEntries : [];
+            this.myTicket = parsed.myTicket || null;
+            this.history = Array.isArray(parsed.history) ? parsed.history : [];
+            this.settings = parsed.settings || {
+              notifications: true,
+              autoRefresh: true,
+              avgServiceTime: 5,
+              systemStatus: 'Local only'
+            };
+            this.managerId = parsed.managerId || `manager-${Date.now()}`;
+            this.ticketCounter = parsed.ticketCounter || 0;
+            this.selectedServiceForJoin = null;
+            this.showCreateQueueModal = false;
+            this.showPublicJoinForm = false;
+            this.joinFormError = '';
+            this.joinDraft = { queueName: '', userName: '', identifier: '' };
+            this.services.forEach(service => this.syncQueue(service.id));
+            this.saveState();
+            return;
+          }
+        } catch (e) {
+          localStorage.removeItem('queueless_state_v1');
+        }
+
+        // Defaults
+        this.auth = null;
+        this.activeView = 'home';
+        this.services = [];
+        this.queueEntries = [];
+        this.myTicket = null;
+        this.history = [];
+        this.settings = {
+          notifications: true,
+          autoRefresh: true,
+          avgServiceTime: 5,
+          systemStatus: 'Local only'
+        };
+        this.managerId = `manager-${Date.now()}`;
+        this.ticketCounter = 0;
+        this.selectedServiceForJoin = null;
+        this.showCreateQueueModal = false;
+        this.showPublicJoinForm = false;
+        this.joinFormError = '';
+        this.joinDraft = { queueName: '', userName: '', identifier: '' };
+        this.saveState();
+      }
+
+      saveState() {
+        const payload = {
+          schemaVersion: 2,
+          auth: this.auth,
+          activeView: this.activeView,
+          services: this.services,
+          queueEntries: this.queueEntries,
+          myTicket: this.myTicket,
+          history: this.history,
+          settings: this.settings,
+          managerId: this.managerId,
+          ticketCounter: this.ticketCounter
+        };
+        try {
+          localStorage.setItem('queueless_state_v1', JSON.stringify(payload));
+        } catch (e) {
+          console.error("Failed to save state", e);
+        }
+      }
+
+      login(role, email = '') {
+        if (role === 'admin') {
+          this.auth = {
+            role: 'admin',
+            name: 'Queue manager',
+            email: email || ''
+          };
+          this.activeView = 'admin-dashboard';
+        } else {
+          this.auth = {
+            role: 'student',
+            name: email || 'Visitor'
+          };
+          // If already has ticket, go to my-queue or dashboard
+          this.activeView = this.myTicket ? 'student-my-queue' : 'student-dashboard';
+        }
+        this.saveState();
+        renderApp();
+      }
+
+      logout() {
+        this.auth = null;
+        this.activeView = 'home';
+        this.saveState();
+        renderApp();
+      }
+
+      navigate(view) {
+        this.activeView = view;
+        this.saveState();
+        renderApp();
+      }
+
+      openPublicJoinForm() {
+        this.joinFormError = '';
+        this.joinDraft = { queueName: '', userName: '', identifier: '' };
+        this.showPublicJoinForm = true;
+        renderApp();
+      }
+
+      closePublicJoinForm() {
+        this.joinFormError = '';
+        this.joinDraft = { queueName: '', userName: '', identifier: '' };
+        this.showPublicJoinForm = false;
+        renderApp();
+      }
+
+      openCreateQueue() {
+        this.showCreateQueueModal = true;
+        renderApp();
+      }
+
+      openManager() {
+        this.auth = { role: 'admin', name: 'Queue manager' };
+        this.activeView = 'admin-dashboard';
+        this.saveState();
+        renderApp();
+      }
+
+      joinFromPublicForm(queueName, userName, identifier = '') {
+        const cleanQueueName = queueName.trim();
+        const cleanUserName = userName.trim();
+        this.joinDraft = { queueName: cleanQueueName, userName: cleanUserName, identifier: identifier.trim() };
+        if (!cleanQueueName || !cleanUserName) {
+          this.joinFormError = 'Enter both the queue name and your name.';
+          renderApp();
+          return;
+        }
+
+        const service = this.services.find(item => item.name.toLowerCase() === cleanQueueName.toLowerCase());
+        if (!service) {
+          this.joinFormError = `Queue not found. Create “${cleanQueueName}” instead.`;
+          renderApp();
+          return;
+        }
+
+        if (service.status !== 'ACTIVE') {
+          this.joinFormError = service.status === 'CLOSED' ? 'Queue has been closed. Nobody can join it.' : 'Queue is currently paused. New people cannot join yet.';
+          renderApp();
+          return;
+        }
+
+        this.auth = {
+          role: 'student',
+          name: cleanUserName,
+          identifier: identifier.trim()
+        };
+        this.showPublicJoinForm = false;
+        this.joinFormError = '';
+        this.joinDraft = { queueName: '', userName: '', identifier: '' };
+        this.selectedServiceForJoin = service;
+        this.confirmJoinQueue();
+      }
+
+      openJoinModal(serviceId) {
+        const service = this.services.find(s => s.id === serviceId);
+        if (service) {
+          this.selectedServiceForJoin = service;
+          renderApp();
+        }
+      }
+
+      closeJoinModal() {
+        this.selectedServiceForJoin = null;
+        renderApp();
+      }
+
+      syncQueue(serviceId) {
+        const service = this.services.find(item => item.id === serviceId);
+        if (!service) return;
+        const waiting = this.queueEntries
+          .filter(entry => entry.serviceId === serviceId && entry.status === 'WAITING')
+          .sort((first, second) => (first.joinedAt || 0) - (second.joinedAt || 0));
+        waiting.forEach((entry, index) => { entry.position = index + 1; });
+        service.waitingCount = waiting.length;
+        const serving = this.queueEntries.find(entry => entry.serviceId === serviceId && (entry.status === 'CALLED' || entry.status === 'SERVING'));
+        service.currentServingTicket = serving ? serving.ticket : 'None';
+        if (this.myTicket && this.myTicket.serviceId === serviceId) {
+          const currentEntry = this.queueEntries.find(entry => entry.id === this.myTicket.entryId);
+          if (currentEntry) {
+            this.myTicket.position = currentEntry.status === 'WAITING' ? currentEntry.position : 0;
+            this.myTicket.status = currentEntry.status;
+            this.myTicket.estimatedWait = currentEntry.status === 'WAITING'
+              ? Math.max(0, currentEntry.position - 1) * this.myTicket.avgServiceTime
+              : 0;
+          }
+        }
+      }
+
+      confirmJoinQueue() {
+        if (!this.selectedServiceForJoin) return;
+        const service = this.selectedServiceForJoin;
+
+        if (service.status !== 'ACTIVE') {
+          alert(service.status === 'CLOSED' ? 'Queue has been closed.' : 'Queue is currently paused.');
+          return;
+        }
+
+        this.syncQueue(service.id);
+        const position = this.queueEntries.filter(entry => entry.serviceId === service.id && entry.status === 'WAITING').length + 1;
+        const ticketId = `${service.prefix}-${String(++this.ticketCounter).padStart(3, '0')}`;
+        const entryId = `local-${Date.now()}`;
+        const timeString = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const newEntry = {
+            id: entryId,
+            ticket: ticketId,
+            serviceId: service.id,
+            serviceName: service.name,
+            user: `${this.auth ? this.auth.name : 'Visitor'} (You)`,
+            joinedTime: timeString,
+            position,
+            status: 'WAITING',
+            joinedAt: Date.now(),
+            counter: service.counter
+        };
+
+        this.queueEntries.push(newEntry);
+          this.syncQueue(service.id);
+        this.myTicket = {
+            entryId,
+            ticket: ticketId,
+            serviceId: service.id,
+            serviceName: service.name,
+            position,
+            initialPosition: position,
+            estimatedWait: Math.max(0, position - 1) * service.avgServiceTime,
+            joinedTime: timeString,
+            counter: service.counter,
+            avgServiceTime: service.avgServiceTime,
+            status: 'WAITING'
+        };
+
+        this.selectedServiceForJoin = null;
+        this.activeView = 'student-my-queue';
+        this.saveState();
+        renderApp();
+      }
+
+      leaveQueue() {
+        if (!this.myTicket) return;
+        const ticketNum = this.myTicket.ticket;
+        const serviceId = this.myTicket.serviceId;
+
+        // Remove from queueEntries
+        this.queueEntries = this.queueEntries.filter(e => e.ticket !== ticketNum);
+
+        // Adjust service count
+        this.syncQueue(serviceId);
+
+        // Add to history
+        this.history.unshift({
+          id: 'h-' + Date.now(),
+          ticket: ticketNum,
+          service: this.myTicket.serviceName,
+          date: 'Today',
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          status: 'CANCELLED',
+          waitTime: '4 min'
+        });
+
+        this.myTicket = null;
+        this.activeView = 'student-dashboard';
+        this.saveState();
+        renderApp();
+      }
+
+      refreshTicketPosition() {
+        if (!this.myTicket || !this.myTicket.entryId) return;
+
+        const entry = this.queueEntries.find(e => e.id === this.myTicket.entryId);
+        if (!entry || entry.status !== 'WAITING') return;
+
+        this.syncQueue(this.myTicket.serviceId);
+        entry.position = Math.max(1, entry.position - 1);
+        this.myTicket.position = entry.position;
+        this.myTicket.estimatedWait = Math.max(0, entry.position - 1) * this.myTicket.avgServiceTime;
+        this.myTicket.status = entry.status;
+        this.saveState();
+        renderApp();
+      }
+
+      finishTurn() {
+        if (!this.myTicket) return;
+
+        // Add to completed history
+        this.history.unshift({
+          id: 'h-' + Date.now(),
+          ticket: this.myTicket.ticket,
+          service: this.myTicket.serviceName,
+          date: 'Today',
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          status: 'COMPLETED',
+          waitTime: `${this.myTicket.initialPosition * (this.myTicket.avgServiceTime || 4)} min`
+        });
+
+        // Remove from live queue
+        this.queueEntries = this.queueEntries.filter(e => e.ticket !== this.myTicket.ticket);
+
+        this.syncQueue(this.myTicket.serviceId);
+
+        this.myTicket = null;
+        this.activeView = 'student-history';
+        this.saveState();
+        renderApp();
+      }
+
+      // --- Admin Actions ---
+      adminCallNext(serviceId) {
+        const service = this.services.find(s => s.id === serviceId);
+        if (!service || service.status !== 'ACTIVE') return;
+
+          const nextInLine = this.queueEntries
+            .filter(e => e.serviceId === serviceId && e.status === 'WAITING')
+            .sort((a, b) => a.position - b.position)[0];
+          if (!nextInLine) {
+            alert('No one is waiting in this queue.');
+            return;
+          }
+
+          const currentServing = this.queueEntries.find(e =>
+            e.serviceId === serviceId && (e.status === 'SERVING' || e.status === 'CALLED')
+          );
+          if (currentServing) {
+            currentServing.status = 'COMPLETED';
+            this.history.unshift({
+              id: 'h-' + Date.now(),
+              ticket: currentServing.ticket,
+              service: currentServing.serviceName,
+              date: 'Today',
+              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              status: 'COMPLETED',
+              waitTime: '12 min'
+            });
+          }
+
+          nextInLine.status = 'CALLED';
+          nextInLine.position = 0;
+          service.currentServingTicket = nextInLine.ticket;
+
+          if (this.myTicket && this.myTicket.ticket === nextInLine.ticket) {
+            this.myTicket.position = 0;
+            this.myTicket.status = 'CALLED';
+          }
+
+          this.syncQueue(serviceId);
+          this.saveState();
+          renderApp();
+      }
+
+      adminCompleteEntry(entryId) {
+        const entry = this.queueEntries.find(e => e.id === entryId);
+        if (!entry) return;
+        entry.status = 'COMPLETED';
+
+        this.syncQueue(entry.serviceId);
+
+        if (this.myTicket && this.myTicket.ticket === entry.ticket) {
+          this.finishTurn();
+          return;
+        }
+
+        this.history.unshift({
+          id: 'h-' + Date.now(),
+          ticket: entry.ticket,
+          service: entry.serviceName,
+          date: 'Today',
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          status: 'COMPLETED',
+          waitTime: '8 min'
+        });
+
+        this.saveState();
+        renderApp();
+      }
+
+      toggleQueue(serviceId) {
+        const service = this.services.find(item => item.id === serviceId);
+        if (!service) return;
+        if (service.status === 'CLOSED') return;
+        service.status = service.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE';
+        this.saveState();
+        renderApp();
+      }
+
+      closeQueue(serviceId) {
+        const service = this.services.find(item => item.id === serviceId);
+        if (!service) return;
+        if (!confirm(`Close ${service.name}? People will no longer be able to join it.`)) return;
+        service.status = 'CLOSED';
+        this.saveState();
+        renderApp();
+      }
+
+      removeQueue(serviceId) {
+        const service = this.services.find(item => item.id === serviceId);
+        if (!service || this.services.length <= 1) return;
+        if (!confirm(`Remove ${service.name}? This only removes the local queue from this browser.`)) return;
+        this.services = this.services.filter(item => item.id !== serviceId);
+        this.queueEntries = this.queueEntries.filter(entry => entry.serviceId !== serviceId);
+        if (this.myTicket && this.myTicket.serviceId === serviceId) this.myTicket = null;
+        this.saveState();
+        renderApp();
+      }
+
+      adminSkipEntry(entryId) {
+        const entry = this.queueEntries.find(e => e.id === entryId);
+        if (!entry) return;
+        entry.status = 'WAITING';
+        entry.joinedAt = Date.now();
+        this.syncQueue(entry.serviceId);
+
+        this.saveState();
+        renderApp();
+      }
+
+      adminRemoveEntry(entryId) {
+        const entry = this.queueEntries.find(e => e.id === entryId);
+        if (entry) {
+          if (this.myTicket && this.myTicket.ticket === entry.ticket) {
+            this.myTicket = null;
+          }
+        }
+        this.queueEntries = this.queueEntries.filter(e => e.id !== entryId);
+        if (entry) this.syncQueue(entry.serviceId);
+        this.saveState();
+        renderApp();
+      }
+
+      createQueue(name, description, avgServiceTime, capacity = '') {
+        const newId = 'srv-' + Date.now();
+        const newService = {
+          id: newId,
+          prefix: name.replace(/[^a-z]/gi, '').charAt(0).toUpperCase() || 'Q',
+          name,
+          description: description || 'No description provided.',
+          ownerId: this.managerId,
+          waitingCount: 0,
+          avgServiceTime: parseInt(avgServiceTime, 10) || 5,
+          capacity: capacity ? parseInt(capacity, 10) : null,
+          currentServingTicket: 'None',
+          status: 'ACTIVE',
+          counter: 'Window ' + (this.services.length + 1)
+        };
+        this.services.push(newService);
+        this.showCreateQueueModal = false;
+        if (!this.auth) this.auth = { role: 'admin', name: 'Queue manager' };
+        this.activeView = 'admin-dashboard';
+        this.saveState();
+        renderApp();
+      }
+    }
+
+    const store = new AppStore();
+
+    // --- TEMPLATES / COMPONENTS ---
+
+    // Brand Logo Helper
+    function renderLogo(size = 'normal') {
+      const isLarge = size === 'large';
+      return `
+        <div class="flex items-center gap-2.5">
+          <div class="${isLarge ? 'w-11 h-11' : 'w-9 h-9'} rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-md shadow-indigo-200">
+            <i data-lucide="layers" class="${isLarge ? 'w-6 h-6' : 'w-5 h-5'}"></i>
+          </div>
+          <div>
+            <span class="${isLarge ? 'text-2xl' : 'text-xl'} font-bold tracking-tight text-slate-900">Queue<span class="text-indigo-600">Less</span></span>
+            <span class="block text-[10px] uppercase font-bold tracking-widest text-slate-400 -mt-1">Smart Flow</span>
+          </div>
+        </div>
+      `;
+    }
+
+    // --- PUBLIC HOME ---
+    function renderLoginView() {
+      return `
+        <div class="min-h-screen flex flex-col bg-slate-50">
+          <header class="bg-white border-b border-slate-200">
+            <div class="max-w-7xl mx-auto w-full px-6 lg:px-10 h-20 flex items-center justify-between">
+              <button onclick="store.navigate('home')" class="text-left">${renderLogo()}</button>
+              <nav class="flex items-center gap-2 sm:gap-4">
+                <button onclick="store.openPublicJoinForm()" class="inline-flex px-3 py-2 text-sm font-semibold text-slate-600 hover:text-indigo-600">Join a Queue</button>
+                <button onclick="store.openManager()" class="px-3 py-2 text-sm font-semibold text-slate-600 hover:text-indigo-600">Manage a Queue</button>
+                <button onclick="store.openCreateQueue()" class="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl shadow-sm">Create a Queue</button>
+              </nav>
+            </div>
+          </header>
+
+          <main class="flex-1">
+            <section class="max-w-7xl mx-auto px-6 lg:px-10 py-16 lg:py-24">
+              <div class="max-w-3xl">
+                <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100 text-xs font-bold uppercase tracking-wider">Digital queue management</span>
+                <h1 class="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight text-slate-900 mt-5 leading-tight">Skip the physical line. Keep your place.</h1>
+                <p class="text-lg sm:text-xl text-slate-600 mt-6 max-w-2xl leading-relaxed">QueueLess helps people join and manage queues digitally instead of waiting physically.</p>
+                <div class="flex flex-col sm:flex-row gap-3 mt-8">
+                  <button onclick="store.openPublicJoinForm()" class="px-6 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md flex items-center justify-center gap-2"><i data-lucide="ticket-plus" class="w-5 h-5"></i>Join a Queue</button>
+                  <button onclick="store.openCreateQueue()" class="px-6 py-3.5 bg-white hover:bg-slate-50 text-slate-800 font-bold rounded-xl border border-slate-300 flex items-center justify-center gap-2"><i data-lucide="plus-circle" class="w-5 h-5 text-indigo-600"></i>Create a Queue</button>
+                </div>
+              </div>
+
+              <div class="grid md:grid-cols-3 gap-5 mt-20">
+                <div class="bg-white border border-slate-200 rounded-2xl p-6"><i data-lucide="mouse-pointer-click" class="w-6 h-6 text-indigo-600"></i><h2 class="font-bold text-slate-900 mt-5">Join from anywhere</h2><p class="text-sm text-slate-500 mt-2">Enter a service and your name to take a place without standing around.</p></div>
+                <div class="bg-white border border-slate-200 rounded-2xl p-6"><i data-lucide="activity" class="w-6 h-6 text-indigo-600"></i><h2 class="font-bold text-slate-900 mt-5">Know when to move</h2><p class="text-sm text-slate-500 mt-2">See your position and estimated wait as the queue changes.</p></div>
+                <div class="bg-white border border-slate-200 rounded-2xl p-6"><i data-lucide="sliders-horizontal" class="w-6 h-6 text-indigo-600"></i><h2 class="font-bold text-slate-900 mt-5">Run a smoother queue</h2><p class="text-sm text-slate-500 mt-2">Create and manage a local queue for your office, event, or service desk.</p></div>
+              </div>
+            </section>
+          </main>
+          <footer class="border-t border-slate-200 bg-white"><div class="max-w-7xl mx-auto px-6 lg:px-10 py-6 flex flex-col sm:flex-row gap-2 justify-between text-xs text-slate-500"><span>QueueLess</span><span>Simple digital queues for real-world services.</span></div></footer>
+        </div>
+      `;
+    }
+
+    // --- STUDENT TOP NAVIGATION ---
+    function renderStudentNav() {
+      const active = store.activeView;
+      const navItem = (id, label, icon) => {
+        const isCurrent = active === id;
+        return `
+          <button onclick="store.navigate('${id}')" 
+            class="flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+              isCurrent 
+                ? 'bg-indigo-50 text-indigo-700 font-semibold' 
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
+            }">
+            <i data-lucide="${icon}" class="w-4 h-4 ${isCurrent ? 'text-indigo-600' : 'text-slate-400'}"></i>
+            <span>${label}</span>
+            ${id === 'student-my-queue' && store.myTicket ? `
+              <span class="ml-1 w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+            ` : ''}
+          </button>
+        `;
+      };
+
+      return `
+        <header class="bg-white border-b border-slate-200/80 sticky top-0 z-30 shadow-xs">
+          <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+              
+              <!-- Brand -->
+              <div class="cursor-pointer" onclick="store.navigate('student-dashboard')">
+                ${renderLogo()}
+              </div>
+
+              <!-- Desktop Nav Links -->
+              <nav class="flex flex-wrap items-center justify-end gap-1">
+                ${navItem('student-dashboard', 'Dashboard', 'layout-dashboard')}
+                ${navItem('student-my-queue', 'My Queue', 'ticket')}
+                ${navItem('student-history', 'History', 'history')}
+                ${navItem('student-profile', 'Profile', 'user')}
+              </nav>
+
+              <!-- Right User info & Switch to Admin / Logout -->
+              <div class="flex items-center gap-3">
+                <button onclick="store.login('admin')" class="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md border border-slate-200">
+                  <i data-lucide="shield" class="w-3.5 h-3.5 text-indigo-600"></i>
+                  <span>Switch to Admin</span>
+                </button>
+
+                <div class="h-6 w-px bg-slate-200 hidden sm:block"></div>
+
+                <div class="flex items-center gap-2">
+                      <div class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-xs border border-indigo-200">
+                    ${(store.auth?.name || 'You').split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase()}
+                  </div>
+                  <span class="hidden sm:block text-xs font-semibold text-slate-700">${store.auth?.name || 'You'}</span>
+                </div>
+
+                <button onclick="store.logout()" title="Logout" 
+                  class="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors">
+                  <i data-lucide="log-out" class="w-4 h-4"></i>
+                </button>
+              </div>
+
+            </div>
+
+          </div>
+        </header>
+      `;
+    }
+
+    // --- 2. STUDENT DASHBOARD ---
+    function renderStudentDashboard() {
+      const activeTicket = store.myTicket;
+      const userName = store.auth?.name || 'there';
+      const fastestQueue = store.services.length ? store.services.reduce((fastest, service) => service.waitingCount * service.avgServiceTime < fastest.waitingCount * fastest.avgServiceTime ? service : fastest) : null;
+
+      return `
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+          
+          <!-- Banner / Active Ticket Callout if already in a queue -->
+          ${activeTicket ? `
+            <div class="mb-8 p-5 bg-gradient-to-r from-indigo-900 to-slate-900 rounded-2xl text-white shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4 border border-indigo-700/50">
+              <div class="flex items-start sm:items-center gap-4">
+                <div class="w-12 h-12 rounded-xl bg-indigo-500/30 border border-indigo-400/40 flex items-center justify-center text-indigo-200 shrink-0">
+                  <i data-lucide="ticket" class="w-6 h-6 text-indigo-300"></i>
+                </div>
+                <div>
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Active Ticket</span>
+                    <span class="text-sm text-indigo-200">Joined at ${activeTicket.joinedTime}</span>
+                  </div>
+                  <h3 class="text-lg font-bold mt-1">Ticket ${activeTicket.ticket} &bull; ${activeTicket.serviceName}</h3>
+                  <p class="text-xs text-slate-300">
+                    ${activeTicket.position === 0 
+                      ? '⚡ Counter is ready! Proceed to ' + activeTicket.counter 
+                      : `You have ${Math.max(0, activeTicket.position - 1)} people ahead of you (~${Math.max(0, activeTicket.position - 1) * activeTicket.avgServiceTime} min wait)`}
+                  </p>
+                </div>
+              </div>
+              <div class="flex items-center gap-2 sm:self-center">
+                <button onclick="store.navigate('student-my-queue')"
+                  class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 font-semibold text-xs rounded-xl transition-all shadow-md shadow-indigo-950/40 flex items-center gap-1.5">
+                  <i data-lucide="eye" class="w-4 h-4"></i>
+                  <span>View Live Ticket</span>
+                </button>
+              </div>
+            </div>
+          ` : ''}
+
+          <!-- Welcome & Actions Header -->
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+            <div>
+              <h1 class="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">Welcome, ${userName}</h1>
+              <p class="text-slate-500 text-sm mt-1">Find a queue or join one using the service name shared with you.</p>
+            </div>
+            
+            ${!activeTicket ? `
+              <div class="flex items-center gap-3">
+                <button onclick="document.getElementById('services-grid').scrollIntoView({ behavior: 'smooth' })" 
+                  class="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-sm font-semibold rounded-xl shadow-sm shadow-indigo-600/20 flex items-center gap-2 transition-all">
+                  <i data-lucide="plus-circle" class="w-4 h-4"></i>
+                  <span>Join a Queue</span>
+                </button>
+              </div>
+            ` : ''}
+          </div>
+
+          <!-- Quick Stats summary cards -->
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <div class="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs">
+              <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Campus Services</span>
+              <p class="text-2xl font-bold text-slate-900 mt-1">${store.services.length}</p>
+              <span class="text-[11px] text-slate-500 font-medium">Created in this session</span>
+            </div>
+            <div class="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs">
+              <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Fastest Queue</span>
+              <p class="text-2xl font-bold text-slate-900 mt-1">${fastestQueue ? fastestQueue.name : '—'}</p>
+              <span class="text-[11px] text-indigo-600 font-medium">${fastestQueue ? `~${fastestQueue.waitingCount * fastestQueue.avgServiceTime} mins estimated` : 'No queues yet'}</span>
+            </div>
+            <div class="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs">
+              <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Current Status</span>
+              <p class="text-2xl font-bold ${activeTicket ? 'text-indigo-600' : 'text-slate-700'} mt-1">
+                ${activeTicket ? 'Queued' : 'Idle'}
+              </p>
+              <span class="text-[11px] text-slate-500">${activeTicket ? activeTicket.ticket : 'No active reservation'}</span>
+            </div>
+            <div class="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs">
+              <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Past Visits</span>
+              <p class="text-2xl font-bold text-slate-900 mt-1">${store.history.length}</p>
+              <span class="text-[11px] text-slate-500">Historical records</span>
+            </div>
+          </div>
+
+          <!-- Section: Available Services -->
+          <div class="mb-6 flex items-center justify-between">
+            <div>
+              <h2 class="text-lg font-bold text-slate-900">Available Services</h2>
+              <p class="text-xs text-slate-500">Real-time occupancy and estimated waiting times</p>
+            </div>
+            <span class="text-xs font-medium text-slate-400 bg-slate-100 px-2.5 py-1 rounded-full">Session queues</span>
+          </div>
+
+          <!-- Services Grid -->
+          <div id="services-grid" class="grid grid-cols-1 md:grid-cols-2 gap-5">
+            ${store.services.length === 0 ? `
+              <div class="md:col-span-2 empty-state rounded-2xl p-10 text-center">
+                <i data-lucide="inbox" class="w-8 h-8 text-slate-400 mx-auto"></i>
+                <h3 class="text-lg font-bold text-slate-800 mt-4">No queues yet</h3>
+                <p class="text-sm text-slate-500 mt-2">Create a queue to get started, or use Join a Queue if someone has shared a service name with you.</p>
+                <div class="flex flex-col sm:flex-row justify-center gap-2 mt-5">
+                  <button onclick="store.openPublicJoinForm()" class="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl">Join a Queue</button>
+                  <button onclick="store.openCreateQueue()" class="px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold rounded-xl border border-slate-300">Create a Queue</button>
+                </div>
+              </div>
+            ` : store.services.map(service => {
+              const estWait = service.waitingCount * service.avgServiceTime;
+              const isUserHere = activeTicket && activeTicket.serviceId === service.id;
+
+              return `
+                <div class="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-xs hover:shadow-md transition-all flex flex-col justify-between relative overflow-hidden group">
+                  
+                  <div class="absolute top-0 right-0 w-24 h-24 bg-indigo-50/50 rounded-bl-full pointer-events-none group-hover:bg-indigo-100/50 transition-colors"></div>
+
+                  <div>
+                    <div class="flex items-start justify-between gap-3 mb-3">
+                      <div>
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                          <span class="w-1.5 h-1.5 rounded-full bg-indigo-600"></span>
+                          Prefix ${service.prefix} &bull; ${service.counter}
+                        </span>
+                        <h3 class="text-lg font-bold text-slate-900 mt-1.5">${service.name}</h3>
+                      </div>
+                      
+                      <div class="text-right">
+                        <span class="text-xs font-semibold text-slate-400 block uppercase tracking-wider">Serving</span>
+                        <span class="text-sm font-extrabold text-slate-800 bg-slate-100 px-2 py-0.5 rounded">${service.currentServingTicket || 'None'}</span>
+                      </div>
+                    </div>
+
+                    <p class="text-xs text-slate-500 line-clamp-2 leading-relaxed mb-6">${service.description}</p>
+                  </div>
+
+                  <div class="pt-4 border-t border-slate-100">
+                    <div class="grid grid-cols-2 gap-2 mb-4">
+                      <div class="flex items-center gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                        <i data-lucide="users" class="w-4 h-4 text-slate-500"></i>
+                        <div>
+                          <span class="text-[10px] uppercase font-bold text-slate-400 block leading-none">In Line</span>
+                          <span class="text-xs font-bold text-slate-800">${service.waitingCount} people</span>
+                        </div>
+                      </div>
+
+                      <div class="flex items-center gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                        <i data-lucide="clock" class="w-4 h-4 text-indigo-500"></i>
+                        <div>
+                          <span class="text-[10px] uppercase font-bold text-slate-400 block leading-none">Est. Wait</span>
+                          <span class="text-xs font-bold text-indigo-600">~${estWait} min</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    ${isUserHere ? `
+                      <button onclick="store.navigate('student-my-queue')"
+                        class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl shadow-xs flex items-center justify-center gap-2 transition-all">
+                        <i data-lucide="check-circle" class="w-4 h-4"></i>
+                        <span>You are in this queue (View Ticket)</span>
+                      </button>
+                    ` : service.status !== 'ACTIVE' ? `
+                      <div class="w-full py-2.5 ${service.status === 'CLOSED' ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-amber-50 text-amber-700 border-amber-200'} border font-semibold text-xs rounded-xl text-center">
+                        ${service.status === 'CLOSED' ? 'Queue has been closed' : 'Queue is currently paused'}
+                      </div>
+                    ` : `
+                      <button onclick="store.openJoinModal('${service.id}')"
+                        class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition-all">
+                        <span>Join Queue</span>
+                        <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                      </button>
+                    `}
+                  </div>
+
+                </div>
+              `;
+            }).join('')}
+          </div>
+
+        </div>
+      `;
+    }
+
+    function renderPublicJoinForm() {
+      if (!store.showPublicJoinForm) return '';
+
+      return `
+        <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60">
+          <div class="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+            <div class="p-6 border-b border-slate-100 flex items-center justify-between">
+              <div><h2 class="text-xl font-bold text-slate-900">Join a Queue</h2><p class="text-sm text-slate-500 mt-1">Enter your details to get a place in line.</p></div>
+              <button onclick="store.closePublicJoinForm()" class="p-2 text-slate-400 hover:text-slate-700 rounded-lg" aria-label="Close"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <form onsubmit="event.preventDefault(); store.joinFromPublicForm(document.getElementById('public-queue-name').value, document.getElementById('public-user-name').value, document.getElementById('public-identifier').value);" class="p-6 space-y-5">
+              ${store.joinFormError ? `<div class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700" role="alert"><div class="flex items-start gap-2"><i data-lucide="circle-alert" class="w-4 h-4 mt-0.5 shrink-0"></i><div><strong>${store.joinFormError}</strong><button type="button" onclick="store.closePublicJoinForm(); store.openCreateQueue();" class="block mt-2 text-sm font-semibold underline">Create a queue instead</button></div></div></div>` : ''}
+              <div><label for="public-queue-name" class="block text-sm font-semibold text-slate-700 mb-1.5">Queue or service name <span class="text-rose-500">*</span></label><input id="public-queue-name" required autocomplete="off" value="${escapeHtml(store.joinDraft.queueName)}" placeholder="e.g. College Office" oninput="document.getElementById('public-join-submit').disabled = !this.value.trim() || !document.getElementById('public-user-name').value.trim();" class="w-full px-4 py-3 bg-white border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" /></div>
+              <div><label for="public-user-name" class="block text-sm font-semibold text-slate-700 mb-1.5">Your name <span class="text-rose-500">*</span></label><input id="public-user-name" required autocomplete="name" value="${escapeHtml(store.joinDraft.userName)}" placeholder="e.g. Arya" oninput="document.getElementById('public-join-submit').disabled = !this.value.trim() || !document.getElementById('public-queue-name').value.trim();" class="w-full px-4 py-3 bg-white border border-slate-300 rounded-xl text-sm focus:ring-2 ring-indigo-500 focus:outline-none" /></div>
+              <div><label for="public-identifier" class="block text-sm font-semibold text-slate-700 mb-1.5">Phone or identifier <span class="font-normal text-slate-400">(optional)</span></label><input id="public-identifier" autocomplete="tel" value="${escapeHtml(store.joinDraft.identifier)}" placeholder="Optional contact detail" class="w-full px-4 py-3 bg-white border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" /></div>
+              <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2"><button type="button" onclick="store.closePublicJoinForm()" class="px-4 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl">Cancel</button><button id="public-join-submit" type="submit" ${store.joinDraft.queueName && store.joinDraft.userName ? '' : 'disabled'} class="px-5 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold rounded-xl">Find Queue</button></div>
+            </form>
+          </div>
+        </div>
+      `;
+    }
+
+    // --- 3. JOIN QUEUE MODAL ---
+    function renderJoinModal() {
+      const srv = store.selectedServiceForJoin;
+      if (!srv) return '';
+
+      const estWait = srv.waitingCount * srv.avgServiceTime;
+
+      return `
+        <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs transition-opacity">
+          <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 overflow-hidden transform transition-all animate-in fade-in zoom-in-95">
+            
+            <div class="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold">
+                  <i data-lucide="ticket-plus" class="w-5 h-5"></i>
+                </div>
+                <div>
+                  <h3 class="text-base font-bold text-slate-900">Confirm Queue Entry</h3>
+                  <p class="text-xs text-slate-500">Virtual line registration</p>
+                </div>
+              </div>
+              <button onclick="store.closeJoinModal()" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100">
+                <i data-lucide="x" class="w-5 h-5"></i>
+              </button>
+            </div>
+
+            <div class="p-6 space-y-4">
+              <div class="bg-indigo-50/70 border border-indigo-100 rounded-xl p-4">
+                <span class="text-xs uppercase font-bold tracking-wider text-indigo-700 block">Service Selected</span>
+                <h4 class="text-base font-bold text-slate-900 mt-0.5">${srv.name}</h4>
+                <p class="text-xs text-slate-600 mt-1">${srv.description}</p>
+              </div>
+
+              <div class="grid grid-cols-2 gap-3">
+                <div class="bg-slate-50 p-3 rounded-xl border border-slate-200/70 text-center">
+                  <span class="text-[10px] uppercase font-bold text-slate-400 block">People Currently Waiting</span>
+                  <span class="text-xl font-extrabold text-slate-800">${srv.waitingCount}</span>
+                </div>
+
+                <div class="bg-slate-50 p-3 rounded-xl border border-slate-200/70 text-center">
+                  <span class="text-[10px] uppercase font-bold text-slate-400 block">Estimated Wait Time</span>
+                  <span class="text-xl font-extrabold text-indigo-600">~${estWait} min</span>
+                </div>
+              </div>
+
+              <div class="text-xs text-slate-500 bg-amber-50 border border-amber-200/60 rounded-xl p-3 flex gap-2.5">
+                <i data-lucide="info" class="w-4 h-4 text-amber-600 shrink-0 mt-0.5"></i>
+                <span>You will receive live position updates. Please proceed to <strong>${srv.counter}</strong> when your position reaches 1.</span>
+              </div>
+            </div>
+
+            <div class="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2.5">
+              <button onclick="store.closeJoinModal()" 
+                class="px-4 py-2.5 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-200/70 rounded-xl transition-colors">
+                Cancel
+              </button>
+              <button onclick="store.confirmJoinQueue()" 
+                class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold text-xs rounded-xl shadow-sm shadow-indigo-600/20 flex items-center gap-1.5 transition-all">
+                <i data-lucide="check" class="w-4 h-4"></i>
+                <span>Confirm & Join Queue</span>
+              </button>
+            </div>
+
+          </div>
+        </div>
+      `;
+    }
+
+    // --- 4 & 5. MY QUEUE & YOUR TURN SCREEN ---
+    function renderMyQueueView() {
+      const ticket = store.myTicket;
+
+      if (!ticket) {
+        return `
+          <div class="max-w-xl mx-auto px-4 py-16 text-center">
+            <div class="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-indigo-100 shadow-xs">
+              <i data-lucide="ticket-slash" class="w-8 h-8 text-indigo-500"></i>
+            </div>
+            <h2 class="text-2xl font-bold text-slate-900">No Active Queue Ticket</h2>
+            <p class="text-sm text-slate-500 mt-2 max-w-sm mx-auto">
+              You are not currently waiting in any campus queue. Browse available services to join a virtual line.
+            </p>
+            <button onclick="store.navigate('student-dashboard')"
+              class="mt-6 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/20 inline-flex items-center gap-2">
+              <i data-lucide="arrow-left" class="w-4 h-4"></i>
+              <span>Go to Available Services</span>
+            </button>
+          </div>
+        `;
+      }
+
+      const isYourTurn = ticket.position === 0;
+      const peopleAhead = Math.max(0, ticket.position - 1);
+      const estWait = peopleAhead * (ticket.avgServiceTime || 4);
+
+      // 5. YOUR TURN STATE UI
+      if (isYourTurn) {
+        return `
+          <div class="max-w-xl mx-auto px-4 py-10">
+            <div class="bg-white rounded-3xl border-2 border-emerald-500 shadow-2xl p-8 sm:p-10 text-center turn-glow relative overflow-hidden">
+              
+              <div class="absolute -top-12 -right-12 w-32 h-32 bg-emerald-100 rounded-full blur-xl pointer-events-none"></div>
+              <div class="absolute -bottom-12 -left-12 w-32 h-32 bg-indigo-100 rounded-full blur-xl pointer-events-none"></div>
+
+              <!-- Big Success Badge -->
+              <div class="w-20 h-20 rounded-2xl bg-emerald-500 text-white flex items-center justify-center mx-auto mb-6 shadow-lg shadow-emerald-500/30 animate-bounce">
+                <i data-lucide="bell-ring" class="w-10 h-10"></i>
+              </div>
+
+              <span class="inline-block px-4 py-1 rounded-full text-xs font-extrabold uppercase tracking-widest bg-emerald-100 text-emerald-800 border border-emerald-300">
+                ⚡ Ready at the Counter
+              </span>
+
+              <h1 class="text-3xl sm:text-4xl font-extrabold text-slate-900 mt-3 tracking-tight">
+                IT'S YOUR TURN!
+              </h1>
+              
+              <p class="text-sm text-slate-600 mt-2">
+                Your ticket has been called. Please step forward to the counter immediately.
+              </p>
+
+              <!-- Ticket Callout Card -->
+              <div class="my-8 p-6 bg-slate-50 rounded-2xl border border-slate-200 text-left space-y-3">
+                <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+                  <span class="text-xs uppercase font-bold text-slate-400">Ticket Number</span>
+                  <span class="text-2xl font-black text-indigo-700 tracking-wider">${ticket.ticket}</span>
+                </div>
+                <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+                  <span class="text-xs uppercase font-bold text-slate-400">Service</span>
+                  <span class="text-sm font-bold text-slate-800">${ticket.serviceName}</span>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="text-xs uppercase font-bold text-slate-400">Designated Counter</span>
+                  <span class="text-base font-extrabold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-lg border border-emerald-200">
+                    ${ticket.counter || 'Desk 02'}
+                  </span>
+                </div>
+              </div>
+
+              <button onclick="store.finishTurn()"
+                class="w-full py-3.5 px-6 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-sm rounded-xl shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center gap-2">
+                <i data-lucide="check-check" class="w-5 h-5"></i>
+                <span>Done (Complete Session)</span>
+              </button>
+
+            </div>
+          </div>
+        `;
+      }
+
+      // 4. WAITING STATE UI (Large Queue Ticket)
+      // Visual progress calculation
+      const initialPos = Math.max(ticket.initialPosition || 8, ticket.position);
+      const progressPercent = Math.min(100, Math.max(10, Math.round(((initialPos - ticket.position) / initialPos) * 100)));
+
+      return `
+        <div class="max-w-lg mx-auto px-4 py-8">
+          
+          <div class="text-center mb-6">
+            <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Active Queue Ticket</h1>
+            <p class="text-xs text-slate-500 mt-1">Your place in this session's local queue</p>
+          </div>
+
+          <!-- THE TICKET CARD -->
+          <div class="bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden relative">
+            
+            <!-- Top Header Part -->
+            <div class="p-6 bg-gradient-to-br from-indigo-700 via-indigo-800 to-slate-900 text-white relative">
+              <div class="flex items-center justify-between">
+                <span class="text-xs uppercase font-bold tracking-widest text-indigo-300">Queue pass</span>
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold tracking-wider uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center gap-1">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  WAITING
+                </span>
+              </div>
+
+              <div class="mt-4 flex items-baseline justify-between">
+                <div>
+                  <span class="text-[11px] text-indigo-200 uppercase font-semibold">Your Ticket Number</span>
+                  <h2 class="text-4xl sm:text-5xl font-black tracking-wider text-white mt-0.5">${ticket.ticket}</h2>
+                </div>
+                <div class="text-right">
+                  <span class="text-[11px] text-indigo-200 uppercase font-semibold">Location</span>
+                  <p class="text-sm font-bold text-white">${ticket.counter}</p>
+                </div>
+              </div>
+
+              <div class="mt-4 pt-4 border-t border-indigo-600/50 flex items-center justify-between text-xs text-indigo-200">
+                <span>${ticket.serviceName}</span>
+                <span>Joined at ${ticket.joinedTime}</span>
+              </div>
+            </div>
+
+            <!-- Perforated Ticket Divider -->
+            <div class="relative flex items-center justify-between bg-white px-4 py-1">
+              <div class="w-6 h-6 rounded-full bg-slate-50 border border-slate-200 -ml-7 shadow-inner"></div>
+              <div class="flex-1 border-b-2 border-dashed border-slate-200 mx-2"></div>
+              <div class="w-6 h-6 rounded-full bg-slate-50 border border-slate-200 -mr-7 shadow-inner"></div>
+            </div>
+
+            <!-- Bottom Ticket Body & Metrics -->
+            <div class="p-6 sm:p-8 space-y-6">
+
+              <!-- Grid stats -->
+              <div class="grid grid-cols-3 gap-3 text-center">
+                <div class="p-3 bg-indigo-50/70 border border-indigo-100 rounded-2xl">
+                  <span class="text-[10px] uppercase font-bold text-indigo-600 block">Position</span>
+                  <span class="text-2xl sm:text-3xl font-black text-indigo-900 mt-1 block">${ticket.position}</span>
+                </div>
+
+                <div class="p-3 bg-slate-50 border border-slate-200/70 rounded-2xl">
+                  <span class="text-[10px] uppercase font-bold text-slate-500 block">Ahead of You</span>
+                  <span class="text-2xl sm:text-3xl font-black text-slate-800 mt-1 block">${peopleAhead}</span>
+                </div>
+
+                <div class="p-3 bg-slate-50 border border-slate-200/70 rounded-2xl">
+                  <span class="text-[10px] uppercase font-bold text-slate-500 block">Est. Wait</span>
+                  <span class="text-2xl sm:text-3xl font-black text-indigo-600 mt-1 block">~${estWait}<span class="text-xs font-semibold">m</span></span>
+                </div>
+              </div>
+
+              <!-- Progress Indicator -->
+              <div>
+                <div class="flex items-center justify-between text-xs font-semibold text-slate-600 mb-2">
+                  <span>Queue Progress</span>
+                  <span>${progressPercent}%</span>
+                </div>
+                <div class="w-full h-3 bg-slate-100 rounded-full overflow-hidden p-0.5 border border-slate-200">
+                  <div class="h-full bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-full transition-all duration-500" style="width: ${progressPercent}%"></div>
+                </div>
+                <p class="text-[11px] text-slate-400 mt-1.5 text-center">We will notify you when position hits 1</p>
+              </div>
+
+              <!-- Actions: Refresh Position & Leave Queue -->
+              <div class="space-y-3 pt-2">
+                <button onclick="store.refreshTicketPosition()"
+                  class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold text-xs rounded-xl shadow-md shadow-indigo-600/20 flex items-center justify-center gap-2 transition-all">
+                  <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                  <span>Simulate Next Ticket Call (Refresh Position)</span>
+                </button>
+
+                <button onclick="if(confirm('Are you sure you want to leave this queue? Your spot will be forfeited.')) store.leaveQueue();"
+                  class="w-full py-2.5 bg-rose-50 hover:bg-rose-100 active:bg-rose-200 text-rose-700 border border-rose-200/80 font-semibold text-xs rounded-xl flex items-center justify-center gap-2 transition-colors">
+                  <i data-lucide="user-x" class="w-4 h-4"></i>
+                  <span>Leave Queue</span>
+                </button>
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+      `;
+    }
+
+    // --- 6. HISTORY SCREEN ---
+    function renderHistoryView() {
+      return `
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 py-8 w-full">
+          
+          <div class="flex items-center justify-between mb-6">
+            <div>
+              <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Queue History</h1>
+              <p class="text-xs text-slate-500 mt-0.5">Logs of your completed and cancelled desk visits</p>
+            </div>
+            <button onclick="store.navigate('student-dashboard')" class="text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
+              <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+              <span>Join New Queue</span>
+            </button>
+          </div>
+
+          <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse text-sm">
+                <thead>
+                  <tr class="bg-slate-50/80 border-b border-slate-200/80 text-slate-500 uppercase text-[11px] font-bold tracking-wider">
+                    <th class="py-3.5 px-4">Ticket</th>
+                    <th class="py-3.5 px-4">Service</th>
+                    <th class="py-3.5 px-4">Date</th>
+                    <th class="py-3.5 px-4">Time</th>
+                    <th class="py-3.5 px-4">Waiting Time</th>
+                    <th class="py-3.5 px-4">Status</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                  ${store.history.map(item => `
+                    <tr class="hover:bg-slate-50/60 transition-colors">
+                      <td class="py-3 px-4 font-bold text-indigo-600">${item.ticket}</td>
+                      <td class="py-3 px-4 font-medium text-slate-800">${item.service}</td>
+                      <td class="py-3 px-4 text-slate-600 text-xs">${item.date}</td>
+                      <td class="py-3 px-4 text-slate-500 text-xs">${item.time}</td>
+                      <td class="py-3 px-4 text-slate-700 font-semibold text-xs">${item.waitTime}</td>
+                      <td class="py-3 px-4">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                          item.status === 'COMPLETED' 
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                            : 'bg-slate-100 text-slate-600 border border-slate-200'
+                        }">
+                          ${item.status}
+                        </span>
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      `;
+    }
+
+    // --- 7. PROFILE SCREEN ---
+    function renderProfileView() {
+      const user = store.auth || {
+        name: 'Visitor',
+        email: '',
+        studentId: '',
+        major: ''
+      };
+
+      return `
+        <div class="max-w-2xl mx-auto px-4 py-8 w-full">
+          <div class="mb-6">
+            <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Student Profile</h1>
+            <p class="text-xs text-slate-500 mt-0.5">Manage your personal details and queue notifications</p>
+          </div>
+
+          <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-6 sm:p-8 space-y-6">
+            
+            <div class="flex items-center gap-4 pb-6 border-b border-slate-100">
+              <div class="w-16 h-16 rounded-2xl bg-indigo-600 text-white font-bold text-xl flex items-center justify-center shadow-md shadow-indigo-200">
+                AR
+              </div>
+              <div>
+                <h2 class="text-lg font-bold text-slate-900">${user.name}</h2>
+                <p class="text-xs text-slate-500">${user.email}</p>
+                <span class="inline-block mt-1 px-2.5 py-0.5 bg-indigo-50 text-indigo-700 font-semibold text-[11px] rounded-md border border-indigo-100">
+                  Student Account &bull; Active
+                </span>
+              </div>
+            </div>
+
+            <!-- Fields -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Student ID</label>
+                <input type="text" readonly value="${user.studentId || 'ST-948201'}" class="w-full p-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-medium" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Enrolled Major</label>
+                <input type="text" readonly value="${user.major || 'Computer Science & Design'}" class="w-full p-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-medium" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Phone (SMS Alerts)</label>
+                <input type="text" value="+1 (555) 392-8411" class="w-full p-2.5 text-xs bg-white border border-slate-300 rounded-xl text-slate-800 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Notification Sound</label>
+                <select class="w-full p-2.5 text-xs bg-white border border-slate-300 rounded-xl text-slate-800 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                  <option>Chime (Default)</option>
+                  <option>Gentle Bell</option>
+                  <option>High Alert</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="pt-4 border-t border-slate-100 flex items-center justify-between">
+              <button onclick="store.logout()" class="text-xs font-semibold text-rose-600 hover:text-rose-800 flex items-center gap-1.5">
+                <i data-lucide="log-out" class="w-4 h-4"></i>
+                <span>Sign Out</span>
+              </button>
+              <button onclick="alert('Profile settings saved locally!');" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow-xs">
+                Save Preferences
+              </button>
+            </div>
+
+          </div>
+        </div>
+      `;
+    }
+
+    // --- 8 - 12. ADMIN INTERFACE ---
+    function renderAdminLayout(contentHtml) {
+      const active = store.activeView;
+      const navLink = (id, label, icon) => {
+        const isCurrent = active === id;
+        return `
+          <button onclick="store.navigate('${id}')"
+            class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+              isCurrent
+                ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30'
+                : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/70'
+            }">
+            <i data-lucide="${icon}" class="w-4 h-4"></i>
+            <span>${label}</span>
+          </button>
+        `;
+      };
+
+      return `
+        <div class="min-h-screen flex flex-col md:flex-row bg-slate-50">
+          
+          <!-- Admin Sidebar -->
+          <aside class="w-full md:w-64 bg-slate-900 text-white flex flex-col justify-between shrink-0 border-r border-slate-800">
+            <div>
+              <!-- Header -->
+              <div class="p-6 border-b border-slate-800/80 flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                  <div class="w-8 h-8 rounded-lg bg-indigo-500 flex items-center justify-center text-white">
+                    <i data-lucide="shield" class="w-4 h-4"></i>
+                  </div>
+                  <div>
+                    <span class="font-bold text-sm tracking-tight text-white">QueueLess</span>
+                    <span class="block text-[9px] uppercase tracking-widest text-indigo-400 font-bold -mt-0.5">Admin Portal</span>
+                  </div>
+                </div>
+                <button onclick="store.login('student')" title="Switch to Student" class="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-800">
+                  <i data-lucide="arrow-left-right" class="w-4 h-4"></i>
+                </button>
+              </div>
+
+              <!-- Navigation links -->
+              <div class="p-4 space-y-1">
+                <span class="text-[10px] uppercase font-bold text-slate-500 tracking-wider px-3 mb-2 block">Management</span>
+                ${navLink('admin-dashboard', 'Dashboard', 'layout-dashboard')}
+                ${navLink('admin-queue-management', 'Queue Management', 'list-ordered')}
+                ${navLink('admin-history', 'Queue History', 'history')}
+                ${navLink('admin-statistics', 'Statistics', 'bar-chart-3')}
+                ${navLink('admin-settings', 'System Settings', 'settings')}
+              </div>
+            </div>
+
+            <!-- Footer user info -->
+            <div class="p-4 border-t border-slate-800/80 bg-slate-950/40">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                  <div class="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 text-indigo-400 font-bold flex items-center justify-center text-xs">
+                    QM
+                  </div>
+                  <div class="truncate">
+                    <span class="text-xs font-bold text-slate-200 block truncate">Queue manager</span>
+                    <span class="text-[10px] text-slate-400 block truncate">This session</span>
+                  </div>
+                </div>
+                <button onclick="store.logout()" title="Logout" class="text-slate-400 hover:text-rose-400 p-1.5 rounded-lg hover:bg-slate-800">
+                  <i data-lucide="log-out" class="w-4 h-4"></i>
+                </button>
+              </div>
+            </div>
+
+          </aside>
+
+          <!-- Main Admin Content Area -->
+          <main class="flex-1 flex flex-col overflow-y-auto">
+            
+            <!-- Top sub-bar -->
+            <div class="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  System Operational
+                </span>
+                <span class="text-xs text-slate-400 hidden sm:inline">&bull; Local session</span>
+              </div>
+
+              <div class="flex items-center gap-3">
+                <button onclick="store.showCreateQueueModal = true; renderApp();"
+                  class="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold text-xs rounded-xl shadow-xs flex items-center gap-1.5">
+                  <i data-lucide="plus" class="w-4 h-4"></i>
+                  <span>Create Service Queue</span>
+                </button>
+
+                <button onclick="store.login('student')" 
+                  class="px-3 py-2 text-xs font-semibold text-slate-600 hover:text-indigo-600 bg-slate-100 hover:bg-indigo-50 border border-slate-200 rounded-xl transition-all">
+                  Student View
+                </button>
+              </div>
+            </div>
+
+            <div class="p-6 md:p-8">
+              ${contentHtml}
+            </div>
+
+          </main>
+
+        </div>
+      `;
+    }
+
+    // --- 8. ADMIN DASHBOARD CONTENT ---
+    function renderAdminDashboardContent() {
+      const ownedServices = store.services.filter(service => !service.ownerId || service.ownerId === store.managerId);
+      // Calculate dynamic summaries
+      const ownedServiceIds = new Set(ownedServices.map(service => service.id));
+      const totalWaiting = ownedServices.reduce((acc, s) => acc + s.waitingCount, 0);
+      const currentlyServing = store.queueEntries.filter(e => ownedServiceIds.has(e.serviceId) && (e.status === 'SERVING' || e.status === 'CALLED')).length;
+      const completedToday = store.history.filter(e => e.status === 'COMPLETED').length;
+
+      return `
+        <div class="space-y-8">
+          
+          <div>
+            <h1 class="text-2xl font-black text-slate-900 tracking-tight">Operations Dashboard</h1>
+            <p class="text-xs text-slate-500 mt-1">Manage queues and people who join during this session</p>
+          </div>
+
+          <!-- 4 Dashboard Metric Cards -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            
+            <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Total Waiting</span>
+                <div class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                  <i data-lucide="users" class="w-4 h-4"></i>
+                </div>
+              </div>
+              <div class="mt-3 flex items-baseline gap-2">
+                <span class="text-3xl font-black text-slate-900">${totalWaiting}</span>
+                <span class="text-xs text-slate-500 font-medium">This session</span>
+              </div>
+              <p class="text-[11px] text-slate-400 mt-1">Students across all active desks</p>
+            </div>
+
+            <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Currently Serving</span>
+                <div class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                  <i data-lucide="user-check" class="w-4 h-4"></i>
+                </div>
+              </div>
+              <div class="mt-3 flex items-baseline gap-2">
+                <span class="text-3xl font-black text-emerald-600">${currentlyServing}</span>
+                <span class="text-xs text-slate-500 font-medium">Counters active</span>
+              </div>
+              <p class="text-[11px] text-slate-400 mt-1">In consultation right now</p>
+            </div>
+
+            <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Completed Today</span>
+                <div class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                  <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+                </div>
+              </div>
+              <div class="mt-3 flex items-baseline gap-2">
+                <span class="text-3xl font-black text-slate-900">${completedToday}</span>
+                <span class="text-xs text-slate-500 font-medium">This session</span>
+              </div>
+              <p class="text-[11px] text-slate-400 mt-1">Total tickets served</p>
+            </div>
+
+            <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Active Queues</span>
+                <div class="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
+                  <i data-lucide="layers" class="w-4 h-4"></i>
+                </div>
+              </div>
+              <div class="mt-3 flex items-baseline gap-2">
+                <span class="text-3xl font-black text-slate-900">${ownedServices.length}</span>
+                <span class="text-xs text-slate-500 font-medium">Created queues</span>
+              </div>
+              <p class="text-[11px] text-slate-400 mt-1">Configured service lines</p>
+            </div>
+
+          </div>
+
+          <!-- Active Queues Section with Quick "Call Next" per Desk -->
+          <div class="space-y-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <h2 class="text-lg font-bold text-slate-900">Active Campus Queues</h2>
+                <p class="text-xs text-slate-500">Live monitor with instant operator controls</p>
+              </div>
+              <button onclick="store.navigate('admin-queue-management')" class="text-xs font-semibold text-indigo-600 hover:text-indigo-700">
+                View Full Queue Table &rarr;
+              </button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              ${ownedServices.length === 0 ? `
+                <div class="md:col-span-2 empty-state rounded-2xl p-10 text-center">
+                  <i data-lucide="layers-2" class="w-8 h-8 text-slate-400 mx-auto"></i>
+                  <h3 class="text-lg font-bold text-slate-800 mt-4">No queues yet</h3>
+                  <p class="text-sm text-slate-500 mt-2">Create a queue to get started. People who join during this session will appear here.</p>
+                  <button onclick="store.openCreateQueue()" class="mt-5 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl">Create a Queue</button>
+                </div>
+              ` : ownedServices.map(srv => {
+                const waitEst = srv.waitingCount * srv.avgServiceTime;
+
+                return `
+                  <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
+                    <div>
+                      <div class="flex items-start justify-between">
+                        <div>
+                          <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 uppercase">
+                            ${srv.counter}
+                          </span>
+                          <h3 class="text-base font-bold text-slate-900 mt-1">${srv.name}</h3>
+                        </div>
+                        <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${srv.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : srv.status === 'PAUSED' ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}">
+                          ${srv.status === 'ACTIVE' ? 'OPEN' : srv.status}
+                        </span>
+                      </div>
+
+                      <div class="grid grid-cols-3 gap-2 my-4 p-3 bg-slate-50 rounded-xl text-center">
+                        <div>
+                          <span class="text-[10px] uppercase font-bold text-slate-400 block">Current Ticket</span>
+                          <span class="text-base font-extrabold text-indigo-600">${srv.currentServingTicket || 'None'}</span>
+                        </div>
+                        <div>
+                          <span class="text-[10px] uppercase font-bold text-slate-400 block">Waiting</span>
+                          <span class="text-base font-extrabold text-slate-800">${srv.waitingCount}</span>
+                        </div>
+                        <div>
+                          <span class="text-[10px] uppercase font-bold text-slate-400 block">Est. Wait</span>
+                          <span class="text-base font-extrabold text-slate-800">~${waitEst}m</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="pt-2 flex items-center gap-2">
+                      <button onclick="store.adminCallNext('${srv.id}')"
+                        class="flex-1 py-2 px-3 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition-all">
+                        <i data-lucide="megaphone" class="w-3.5 h-3.5"></i>
+                        <span>Call Next Ticket</span>
+                      </button>
+
+                      <button onclick="store.toggleQueue('${srv.id}')" ${srv.status === 'CLOSED' ? 'disabled' : ''}
+                        class="py-2 px-3 ${srv.status === 'ACTIVE' ? 'bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200' : srv.status === 'PAUSED' ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'} text-xs font-semibold rounded-xl border">
+                        ${srv.status === 'ACTIVE' ? 'Pause' : srv.status === 'PAUSED' ? 'Resume' : 'Closed'}
+                      </button>
+
+                      <button onclick="store.closeQueue('${srv.id}')"
+                        class="py-2 px-3 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-semibold rounded-xl">
+                        Close
+                      </button>
+
+                      <button onclick="store.removeQueue('${srv.id}')" title="Remove queue"
+                        class="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl border border-slate-200">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                      </button>
+
+                      <button onclick="store.navigate('admin-queue-management')" title="Manage"
+                        class="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl border border-slate-200">
+                        <i data-lucide="external-link" class="w-4 h-4"></i>
+                      </button>
+                    </div>
+
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+
+        </div>
+      `;
+    }
+
+    // --- 9. ADMIN QUEUE MANAGEMENT (Interactive Table) ---
+    function renderAdminQueueManagementContent() {
+      const ownedServiceIds = new Set(store.services.filter(service => !service.ownerId || service.ownerId === store.managerId).map(service => service.id));
+      const entries = store.queueEntries.filter(entry => ownedServiceIds.has(entry.serviceId));
+
+      return `
+        <div class="space-y-6">
+          
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h1 class="text-2xl font-black text-slate-900 tracking-tight">Queue Management</h1>
+              <p class="text-xs text-slate-500 mt-0.5">Control live ticket positions, call customers, or reassign queue slots</p>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <button onclick="store.showCreateQueueModal = true; renderApp();"
+                class="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                <span>Add Service</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Queue Table -->
+          <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse text-sm">
+                <thead>
+                  <tr class="bg-slate-50/80 border-b border-slate-200/80 text-slate-500 uppercase text-[11px] font-bold tracking-wider">
+                    <th class="py-3.5 px-4">Ticket</th>
+                    <th class="py-3.5 px-4">Student User</th>
+                    <th class="py-3.5 px-4">Service</th>
+                    <th class="py-3.5 px-4">Joined</th>
+                    <th class="py-3.5 px-4">Position</th>
+                    <th class="py-3.5 px-4">Status</th>
+                    <th class="py-3.5 px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                  ${entries.length === 0 ? `
+                    <tr><td colspan="7" class="py-8 text-center text-xs text-slate-400">No people are currently waiting.</td></tr>
+                  ` : entries.map(e => `
+                    <tr class="hover:bg-slate-50/70 transition-colors">
+                      <td class="py-3.5 px-4 font-black text-indigo-600">${e.ticket}</td>
+                      <td class="py-3.5 px-4 font-semibold text-slate-800">${e.user}</td>
+                      <td class="py-3.5 px-4 text-xs text-slate-600">${e.serviceName}</td>
+                      <td class="py-3.5 px-4 text-xs text-slate-500">${e.joinedTime}</td>
+                      <td class="py-3.5 px-4 font-bold text-slate-700">
+                        ${e.position === 0 ? '<span class="text-emerald-600 font-black">Serving</span>' : '#' + e.position}
+                      </td>
+                      <td class="py-3.5 px-4">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                          e.status === 'SERVING' 
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-300' 
+                            : e.status === 'WAITING' 
+                            ? 'bg-amber-50 text-amber-700 border border-amber-200' 
+                            : 'bg-slate-100 text-slate-600 border border-slate-200'
+                        }">
+                          ${e.status}
+                        </span>
+                      </td>
+                      <td class="py-3.5 px-4 text-right">
+                        <div class="inline-flex items-center gap-1.5">
+                          <button onclick="store.adminCallNext('${e.serviceId}')" title="Call Next" 
+                            class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-lg border border-indigo-200">
+                            Call Next
+                          </button>
+                          <button onclick="store.adminCompleteEntry('${e.id}')" title="Mark Complete" 
+                            class="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-lg border border-emerald-200">
+                            Complete
+                          </button>
+                          <button onclick="store.adminSkipEntry('${e.id}')" title="Skip to Back" 
+                            class="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-semibold rounded-lg border border-amber-200">
+                            Skip
+                          </button>
+                          <button onclick="store.adminRemoveEntry('${e.id}')" title="Remove Entry" 
+                            class="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg">
+                            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      `;
+    }
+
+    // --- 10. CREATE QUEUE MODAL ---
+    function renderCreateQueueModal() {
+      if (!store.showCreateQueueModal) return '';
+
+      return `
+        <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div class="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+            
+            <div class="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center">
+                  <i data-lucide="plus" class="w-4 h-4"></i>
+                </div>
+                <div>
+                  <h3 class="text-base font-bold text-slate-900">Create New Service Queue</h3>
+                  <p class="text-xs text-slate-500">Configure new desk or campus department</p>
+                </div>
+              </div>
+              <button onclick="store.showCreateQueueModal = false; renderApp();" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+                <i data-lucide="x" class="w-5 h-5"></i>
+              </button>
+            </div>
+
+            <form onsubmit="
+              event.preventDefault(); 
+              const name = document.getElementById('cq-name').value;
+              const desc = document.getElementById('cq-desc').value;
+              const time = document.getElementById('cq-time').value;
+              const capacity = document.getElementById('cq-capacity').value;
+              store.createQueue(name, desc, time, capacity);
+            " class="p-6 space-y-4">
+              
+              <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">Service Name <span class="text-rose-500">*</span></label>
+                <input id="cq-name" type="text" required placeholder="e.g., College Office" oninput="document.getElementById('cq-submit').disabled = !this.value.trim() || !document.getElementById('cq-time').value;"
+                  class="w-full p-2.5 text-xs bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+              </div>
+
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">Estimated service time (min) <span class="text-rose-500">*</span></label>
+                  <input id="cq-time" type="number" required min="1" max="60" placeholder="e.g. 5" oninput="document.getElementById('cq-submit').disabled = !this.value || !document.getElementById('cq-name').value.trim();"
+                    class="w-full p-2.5 text-xs bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none font-bold" />
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">Capacity <span class="font-normal text-slate-400">(optional)</span></label>
+                  <input id="cq-capacity" type="number" min="1" max="9999" placeholder="No limit"
+                    class="w-full p-2.5 text-xs bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none font-bold" />
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">Description</label>
+                <textarea id="cq-desc" rows="2" placeholder="Brief outline of services offered at this counter..."
+                  class="w-full p-2.5 text-xs bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"></textarea>
+              </div>
+
+              <div class="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200/70">
+                <div>
+                  <span class="text-xs font-bold text-slate-800 block">Active Status</span>
+                  <span class="text-[11px] text-slate-500">Make queue immediately available to students</span>
+                </div>
+                <input type="checkbox" checked class="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500" />
+              </div>
+
+              <div class="pt-3 flex items-center justify-end gap-2.5">
+                <button type="button" onclick="store.showCreateQueueModal = false; renderApp();"
+                  class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl">
+                  Cancel
+                </button>
+                <button id="cq-submit" type="submit" disabled
+                  class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold text-xs rounded-xl shadow-xs">
+                  Create Queue
+                </button>
+              </div>
+
+            </form>
+
+          </div>
+        </div>
+      `;
+    }
+
+    // --- 11. STATISTICS SCREEN ---
+    function renderAdminStatisticsContent() {
+      const completedCount = store.history.filter(item => item.status === 'COMPLETED').length;
+      const cancelledCount = store.history.filter(item => item.status === 'CANCELLED').length;
+      const averageServiceTime = store.services.length ? (store.services.reduce((sum, service) => sum + service.avgServiceTime, 0) / store.services.length).toFixed(1) : '0';
+      return `
+        <div class="space-y-6">
+          
+          <div>
+            <h1 class="text-2xl font-black text-slate-900 tracking-tight">Queue Analytics & Performance</h1>
+            <p class="text-xs text-slate-500 mt-0.5">Historical throughput, peak hours, and counter efficiency metrics</p>
+          </div>
+
+          <!-- Top Stats cards -->
+          <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            <div class="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs">
+              <span class="text-[10px] font-bold uppercase text-slate-400 block">Total Served</span>
+              <span class="text-2xl font-black text-slate-900 mt-1 block">${completedCount}</span>
+              <span class="text-[10px] text-slate-500 font-semibold">This session</span>
+            </div>
+            <div class="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs">
+              <span class="text-[10px] font-bold uppercase text-slate-400 block">Avg Waiting Time</span>
+              <span class="text-2xl font-black text-indigo-600 mt-1 block">0 min</span>
+              <span class="text-[10px] text-slate-500 font-semibold">No completed waits yet</span>
+            </div>
+            <div class="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs">
+              <span class="text-[10px] font-bold uppercase text-slate-400 block">Avg Service Time</span>
+              <span class="text-2xl font-black text-slate-900 mt-1 block">${averageServiceTime} min</span>
+              <span class="text-[10px] text-slate-500 font-semibold">Configured average</span>
+            </div>
+            <div class="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs">
+              <span class="text-[10px] font-bold uppercase text-slate-400 block">Completed Today</span>
+              <span class="text-2xl font-black text-emerald-600 mt-1 block">${completedCount}</span>
+              <span class="text-[10px] text-slate-500 font-semibold">This session</span>
+            </div>
+            <div class="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs">
+              <span class="text-[10px] font-bold uppercase text-slate-400 block">Cancelled / Drop</span>
+              <span class="text-2xl font-black text-rose-600 mt-1 block">${cancelledCount}</span>
+              <span class="text-[10px] text-slate-400 font-semibold">This session</span>
+            </div>
+          </div>
+
+          <!-- Clean Simple CSS-based Charts -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            
+            <!-- Hourly Load Chart -->
+            <div class="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="text-sm font-bold text-slate-900">Queue Traffic by Hour (Students)</h3>
+                <span class="text-xs text-slate-400">Session activity</span>
+              </div>
+
+              <!-- Bar graph bars -->
+              <div class="h-48 flex items-end justify-between gap-2 pt-6 pb-2 px-2 border-b border-slate-100">
+                ${store.history.length === 0 ? '<div class="empty-state rounded-xl p-8 text-center w-full text-sm text-slate-500">No queue activity yet.</div>' : store.history.map(item => ({ hour: item.time, count: 1, h: '35%' })).map(bar => `
+                  <div class="flex-1 flex flex-col items-center gap-1.5 h-full justify-end group">
+                    <span class="text-[10px] font-bold text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity">${bar.count}</span>
+                    <div class="w-full bg-indigo-500 group-hover:bg-indigo-600 rounded-t-md transition-all" style="height: ${bar.h}"></div>
+                    <span class="text-[10px] text-slate-400 font-medium">${bar.hour}</span>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+
+            <!-- Wait Time by Service -->
+            <div class="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
+              <h3 class="text-sm font-bold text-slate-900 mb-4">Average Wait Time by Desk</h3>
+              
+              <div class="space-y-4">
+                ${store.services.length === 0 ? '<div class="empty-state rounded-xl p-8 text-center text-sm text-slate-500">Create a queue to see service metrics.</div>' : store.services.map(service => ({ name: service.name, time: `${service.avgServiceTime} min`, pct: Math.min(100, service.avgServiceTime * 10), color: 'bg-indigo-600' })).map(item => `
+                  <div>
+                    <div class="flex justify-between text-xs font-semibold mb-1">
+                      <span class="text-slate-700">${item.name}</span>
+                      <span class="text-slate-900 font-bold">${item.time}</span>
+                    </div>
+                    <div class="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div class="h-full ${item.color} rounded-full" style="width: ${item.pct}%"></div>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+      `;
+    }
+
+    // --- 12. SETTINGS SCREEN ---
+    function renderAdminSettingsContent() {
+      return `
+        <div class="max-w-2xl space-y-6">
+          
+          <div>
+            <h1 class="text-2xl font-black text-slate-900 tracking-tight">System Settings</h1>
+            <p class="text-xs text-slate-500 mt-0.5">Configure automated notifications, queue algorithm, and terminal refresh rates</p>
+          </div>
+
+          <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-6 space-y-6">
+            
+            <div class="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div>
+                <span class="text-xs font-bold text-slate-900 block">Queue Push Notifications</span>
+                <span class="text-[11px] text-slate-500">Alert students via browser notifications when position reaches 1</span>
+              </div>
+              <input type="checkbox" ${store.settings.notifications ? 'checked' : ''} 
+                onchange="store.settings.notifications = this.checked; store.saveState();"
+                class="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500" />
+            </div>
+
+            <div class="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div>
+                <span class="text-xs font-bold text-slate-900 block">Auto Refresh Active Terminals</span>
+                <span class="text-[11px] text-slate-500">Poll counter states every 15 seconds</span>
+              </div>
+              <input type="checkbox" ${store.settings.autoRefresh ? 'checked' : ''}
+                onchange="store.settings.autoRefresh = this.checked; store.saveState();"
+                class="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500" />
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 pb-4 border-b border-slate-100">
+              <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Global Baseline Service Time</label>
+                <div class="flex items-center gap-2">
+                  <input type="number" value="${store.settings.avgServiceTime}" 
+                    onchange="store.settings.avgServiceTime = parseInt(this.value,10); store.saveState();"
+                    class="w-24 p-2 text-xs bg-white border border-slate-300 rounded-xl font-bold" />
+                  <span class="text-xs text-slate-500">minutes / student</span>
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Operational Mode</label>
+                <select class="w-full p-2 text-xs bg-white border border-slate-300 rounded-xl font-semibold text-slate-800">
+                  <option>Normal (Standard Flow)</option>
+                  <option>Peak Rush Mode (Fast Triage)</option>
+                  <option>Exam / Registration Week</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between">
+              <div>
+                <span class="text-xs font-bold text-slate-900 block">Clear Local Data</span>
+                <span class="text-[11px] text-slate-500">Remove queues and activity stored in this browser</span>
+              </div>
+              <button onclick="localStorage.removeItem('queueless_state_v1'); location.reload();"
+                class="px-3 py-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 text-xs font-semibold rounded-xl border border-rose-200">
+                Clear Local Data
+              </button>
+            </div>
+
+          </div>
+
+        </div>
+      `;
+    }
+
+    // --- MAIN RENDER FUNCTION ---
+    function renderApp() {
+      const appEl = document.getElementById('app');
+      if (!appEl) return;
+
+      const view = store.activeView;
+
+      let html = '';
+
+      if (view === 'login' || !store.auth) {
+        html = renderLoginView();
+      } else if (view.startsWith('admin-')) {
+        // Render Admin shell
+        let inner = '';
+        if (view === 'admin-dashboard') inner = renderAdminDashboardContent();
+        else if (view === 'admin-queue-management') inner = renderAdminQueueManagementContent();
+        else if (view === 'admin-history') inner = renderHistoryView();
+        else if (view === 'admin-statistics') inner = renderAdminStatisticsContent();
+        else if (view === 'admin-settings') inner = renderAdminSettingsContent();
+        else inner = renderAdminDashboardContent();
+
+        html = renderAdminLayout(inner);
+      } else {
+        // Render Student Portal
+        let studentContent = '';
+        if (view === 'student-dashboard') studentContent = renderStudentDashboard();
+        else if (view === 'student-my-queue') studentContent = renderMyQueueView();
+        else if (view === 'student-history') studentContent = renderHistoryView();
+        else if (view === 'student-profile') studentContent = renderProfileView();
+        else studentContent = renderStudentDashboard();
+
+        html = `
+          ${renderStudentNav()}
+          <main class="flex-1 flex flex-col">
+            ${studentContent}
+          </main>
+        `;
+      }
+
+      // Modals
+      html += renderPublicJoinForm();
+      html += renderJoinModal();
+      html += renderCreateQueueModal();
+
+      appEl.innerHTML = html;
+
+      // Re-initialize icons
+      if (window.lucide) {
+        window.lucide.createIcons();
+      }
+    }
+
+    // Initial render on boot
+    window.addEventListener('DOMContentLoaded', () => {
+      renderApp();
+    });
+  </script>
+</body>
+</html>
